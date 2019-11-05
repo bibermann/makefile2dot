@@ -90,12 +90,14 @@ REGEX_DOCUMENTED_COMMENT="##$spaces(.*)"
 # header
 DOT=$(echo -e "digraph G {\n  graph [nodesep=\"0.1\", ranksep=\"$RANKSEP\"];\n  splines=\"$SPLINES\";")
 
-# find targets that have own recipes
+# find all targets and those who have own recipes
+all_targets=()
 targets_with_recipes=()
 current_target=""
 for line in "${lines[@]}"; do
     if [[ $line =~ $REGEX_TARGET_REST ]]; then  # line is target declaration
         current_target="${BASH_REMATCH[1]}"
+        all_targets+=( "$current_target" )
     else
         if ! [ -z "$current_target" ]; then
             if [[ $line =~ $REGEX_RECIPE ]] && ! [[ $line =~ $REGEX_ECHO_OR_NOOP ]]; then  # line has command different than echo/noop
@@ -188,6 +190,10 @@ for line in "${lines[@]}"; do
             fi
             dependency_escaped=${dependency//-/_}
             DOT=$(echo -e "$DOT\n  $dependency_escaped -> $target_escaped [color=\"#ff0000aa\", $LABEL_ATTRIBUTE_NAME=\"$label\"];")
+
+            if ! printf '%s\n' ${all_targets[@]} | grep -q -P "^$dependency\$"; then  # dependency is no known target
+                1>&2 echo "Warning: Dependency '$dependency' not found in target declarations."
+            fi
         done
     fi
 done
