@@ -20,13 +20,13 @@ Usage: `./makefile2dot.sh WORDS_PER_LINE RANKSEP SPLINES`
 
 Supporting:
 - Target groups: `##@ My group header`
-- Highlighted targets: `my-taget:  ## Double-hash to highlight`
+- Highlighted targets: `my-target:  ## Double-hash to highlight` or `.PHONY: my-target  ## Double-hash to highlight`
 
 ## Example
 
 ![alt text](example/Makefile.svg)
 
-The [example Makefile](example/Makefile) features auto-generated help messages [1].
+The [example Makefile](example/Makefile) features auto-generated help messages inspired by [1].
 
 ```bash
 $ make help
@@ -46,4 +46,3 @@ Misc
 ```
 
 [1] https://suva.sh/posts/well-documented-makefiles/
-    (replace `[a-zA-Z_-]` with `[^\t #]`)

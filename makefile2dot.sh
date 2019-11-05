@@ -16,6 +16,18 @@ WORDS_PER_LINE=$1
 RANKSEP=$2
 SPLINES=$3
 
+case $SPLINES in
+    ortho|curved)
+        # Because else we get one of the following errors:
+        # - Warning: Orthogonal edges do not currently handle edge labels. Try using xlabels.
+        # - Warning: edge labels with splines=curved not supported in dot - use xlabels
+        LABEL_ATTRIBUTE_NAME=xlabel
+        ;;
+    *)
+        LABEL_ATTRIBUTE_NAME=label
+        ;;
+esac
+
 split_each_nth_word()
 {
     # Usage: split_each_nth_word <nth> <separator> <input...>
@@ -56,18 +68,24 @@ while read; do
     lines+=( "$REPLY" )
 done
 
-REGEX_GROUP_COMMENT="^##@ (.*)"
+spaces="[[:blank:]]*"
+target_begin="[^[:blank:]=#.]"
+target="$target_begin[^[:blank:]=#]*"
+REGEX_GROUP_COMMENT="^##@$spaces(.*)"
+REGEX_PHONY_TARGET_COMMENT="^\\.PHONY$spaces:$spaces($target)$spaces#+$spaces(.*)"
+REGEX_PHONY_TARGET_DOCUMENTED_COMMENT="^\\.PHONY$spaces:$spaces($target)$spaces##$spaces(.*)"
 
-RECIPEPREFIX=$(echo -e "\t")
-REGEX_RECIPE_BEGIN=$(echo -e "^$RECIPEPREFIX[\t ]*")
-REGEX_RECIPE=$(echo -e "$REGEX_RECIPE_BEGIN[^\t #]")
-REGEX_ECHO_OR_NOOP=$(echo -e "$REGEX_RECIPE_BEGIN@?(echo |:|#|\\\$\((info|warning|error))")
+recipeprefix=$'\t'
+recipe_begin="^$recipeprefix$spaces"
+command_begin="[^[:blank:]#]"
+REGEX_RECIPE="$recipe_begin$command_begin"
+REGEX_ECHO_OR_NOOP="$recipe_begin@?(echo |:|#|\\\$\((info|warning|error))"
 
-REGEX_TARGET_REST=$(echo -e "^([^\t #.]+)[\t ]*:($|[\t ].*)")
-REGEX_TARGET_DEPENDENCIES=$(echo -e "^([^\t #.]+)[\t ]*:[\t ]+([^\t #][^#]*)")
+REGEX_TARGET_REST="^($target)$spaces:($|[[:blank:]].*)"
+REGEX_TARGET_DEPENDENCIES="^($target)$spaces:$spaces($target_begin[^#]*)"
 
-REGEX_REST_IS_COMMENT=$(echo -e "#+[\t ]*(.*)")
-REGEX_REST_IS_DOCUMENTED_COMMENT=$(echo -e "##[\t ]*(.*)")
+REGEX_COMMENT="#+$spaces(.*)"
+REGEX_DOCUMENTED_COMMENT="##$spaces(.*)"
 
 # header
 DOT=$(echo -e "digraph G {\n  graph [nodesep=\"0.1\", ranksep=\"$RANKSEP\"];\n  splines=\"$SPLINES\";")
@@ -90,6 +108,9 @@ done
 
 # add clusters and nodes
 nested=0
+phony_target=""
+phony_comment=""
+phony_is_documented_comment=""
 for line in "${lines[@]}"; do
     if [[ $line =~ $REGEX_GROUP_COMMENT ]]; then  # line is group comment
         # add cluster
@@ -101,6 +122,14 @@ for line in "${lines[@]}"; do
         group_escaped="$(escape_for_dot $group)"
         DOT=$(echo -e "$DOT\n  subgraph cluster_$group_escaped {\n    label=\"$group\";\n    style=\"rounded, filled\"; color=gray; fillcolor=\"#eeeeee\"")
         nested=$((nested+1))
+    elif [[ $line =~ $REGEX_PHONY_TARGET_COMMENT ]]; then  # line is phony declaration
+        phony_target="${BASH_REMATCH[1]}"
+        phony_comment="${BASH_REMATCH[2]}"
+        if [[ $line =~ $REGEX_PHONY_TARGET_DOCUMENTED_COMMENT ]]; then
+            phony_is_documented_comment="true"
+        else
+            phony_is_documented_comment="false"
+        fi
     elif [[ $line =~ $REGEX_TARGET_REST ]]; then  # line is target declaration
         # add node
         target="${BASH_REMATCH[1]}"
@@ -116,13 +145,19 @@ for line in "${lines[@]}"; do
         else
             style="rounded, filled, dashed"
         fi
-        if [[ $rest =~ $REGEX_REST_IS_DOCUMENTED_COMMENT ]]; then  # target has documented comment
+        if [[ $rest =~ $REGEX_DOCUMENTED_COMMENT ]] || [[ "$phony_target" == "$target" && "$phony_is_documented_comment" == "true" ]]; then  # target has documented comment
             fillcolor=lightblue
         else
             fillcolor=lightgray
         fi
-        if [[ $rest =~ $REGEX_REST_IS_COMMENT ]]; then  # target has comment
+        if [[ $rest =~ $REGEX_COMMENT ]]; then  # target has comment
             comment="${BASH_REMATCH[1]}"
+        elif [[ "$phony_target" == "$target" ]]; then  # target has comment defined in previous .PHONY declaration
+            comment="$phony_comment"
+        else
+            comment=""
+        fi
+        if ! [ -z "$comment" ]; then
             label="<$target<BR /><FONT POINT-SIZE=\"10\">$(split_each_nth_word $WORDS_PER_LINE "<BR />" $comment)</FONT>>"
         else
             label="\"$target\""
@@ -152,7 +187,7 @@ for line in "${lines[@]}"; do
                 label=$counter
             fi
             dependency_escaped=${dependency//-/_}
-            DOT=$(echo -e "$DOT\n  $dependency_escaped -> $target_escaped [color=\"#ff0000aa\", label=\"$label\"];")
+            DOT=$(echo -e "$DOT\n  $dependency_escaped -> $target_escaped [color=\"#ff0000aa\", $LABEL_ATTRIBUTE_NAME=\"$label\"];")
         done
     fi
 done

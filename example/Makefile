@@ -3,38 +3,44 @@ SHELL := /bin/bash
 
 
 ##@ A group of targets
-.PHONY: simple-comment example-target-2
 
-root-target:  ## I have no dependencies
+.PHONY: root-target  ## I have no dependencies
+root-target:
 	$(info root-target)
 	@ls
 
-no-recipes: root-target  ## I have no effective recipes
+.PHONY: no-recipes  ## I have no effective recipes
+no-recipes: root-target
 	$(info no-recipes)
 	@# Note: This target has no effective recipes (besides printing text)
 
-two-hashes-comment: no-recipes  ## I am listed in `make help` and highlighted bluish
+.PHONY: two-hashes-comment  ## I am listed in `make help` and highlighted bluish
+two-hashes-comment: no-recipes
 	$(info two-hashes-comment)
 	@ls
 
 
 ##@ Another group
-.PHONY: foo ordered
 
+.PHONY: foo
 foo:
 	@ls
 
-bar: foo  # I have a simple comment
+.PHONY: bar  # I have a simple comment
+bar: foo
 	@ls
 
-ordered: no-recipes bar  ## I have multiple dependencies
+.PHONY: ordered  ## I have multiple dependencies
+ordered: no-recipes bar
 	@ls
 
 
 ##@ Misc
-.PHONY: help
 
-# From https://suva.sh/posts/well-documented-makefiles/
-# But changed `[a-zA-Z_-]` to `[^\t #]` in the regex below.
-help:  ## Display this help
-	@awk 'BEGIN {FS = ":.*##"; printf "Usage:\n  make \033[36m<target>\033[0m\n"} /^[^\t #]+:.*?##/ { printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
+# Inspired by https://suva.sh/posts/well-documented-makefiles/
+.PHONY: help  ## Display this help
+help:
+	@# if you have the comments on the target declaration:
+	@#awk 'BEGIN {FS = "[[:blank:]]*:.*##[[:blank:]]*"; printf "Usage:\n  make \033[36m<target>\033[0m\n"} /^[^[:blank:]=#]+:.*?##/ {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2} /^##@[[:blank:]]/ {printf "\n\033[1m%s\033[0m\n", substr($$0, 5)}' $(MAKEFILE_LIST)
+	@# if you have the comments on the phony declaration:
+	@awk 'BEGIN {FS = "(\\.PHONY:[[:blank:]]*|[[:blank:]]*##[[:blank:]]*)"; printf "Usage:\n  make \033[36m<target>\033[0m\n"} /^\.PHONY:[[:blank:]]*[^[:blank:]#]+[[:blank:]]*##/ {printf "  \033[36m%-20s\033[0m %s\n", $$2, $$3} /^##@[[:blank:]]/ {printf "\n\033[1m%s\033[0m\n", substr($$0, 5)}' $(MAKEFILE_LIST)
